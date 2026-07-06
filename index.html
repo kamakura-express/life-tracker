@@ -234,6 +234,29 @@
     margin-bottom: 14px;
   }
 
+  .date-row{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .date-label{
+    font-size: 12px;
+    font-weight: 900;
+    color: var(--soft);
+  }
+  .amount-panel input[type="date"]{
+    font-size: 13px;
+    font-weight: 700;
+    font-family:'Noto Sans TC', sans-serif;
+    border: 2px solid var(--ink);
+    border-radius: 4px;
+    background: var(--paper);
+    padding: 5px 8px;
+    color: var(--ink);
+    outline:none;
+  }
+
   .chip-row{
     display:flex;
     flex-wrap:wrap;
@@ -306,6 +329,37 @@
     border: 2px solid var(--red);
   }
   .toast.show{ opacity:1; transform: translateX(-50%) translateY(0) rotate(-1deg); }
+
+  .month-nav{
+    display:flex;
+    align-items:center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .nav-arrow{
+    cursor:pointer;
+    font-size: 13px;
+    font-weight: 900;
+    width: 26px; height: 26px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border: 2px solid var(--ink);
+    border-radius: 4px;
+    background: var(--paper);
+    box-shadow: 2px 2px 0 var(--ink);
+    user-select:none;
+  }
+  .nav-arrow:active{ transform: translate(1px,1px); box-shadow: 1px 1px 0 var(--ink); }
+  .nav-arrow.disabled{
+    opacity: .3;
+    pointer-events: none;
+  }
+  .nav-current{
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--soft);
+  }
 
   /* Dashboard */
   .month-total-wrap{
@@ -456,6 +510,19 @@
   }
   .log-item .log-del:hover{ opacity:1; color: var(--red); }
 
+  .past-toggle{
+    margin-top: 12px;
+    text-align:center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--soft);
+    cursor:pointer;
+    border-top: 2px dashed var(--ink);
+    padding-top: 10px;
+  }
+  .past-toggle:hover{ color: var(--red); }
+  .past-list{ margin-top: 10px; }
+
   .upcoming-item{
     display:flex;
     align-items:flex-start;
@@ -546,6 +613,10 @@
         <span class="currency">$</span>
         <input type="number" id="amountInput" placeholder="0" inputmode="decimal">
       </div>
+      <div class="date-row">
+        <span class="date-label">日期</span>
+        <input type="date" id="dateInput">
+      </div>
       <input type="text" id="noteInput" placeholder="備註(選填,例如：奶茶、地鐵)">
       <div class="chip-row" id="chipRow"></div>
       <div class="btn-row">
@@ -557,7 +628,12 @@
 
   <!-- Dashboard -->
   <div class="card">
-    <div class="section-title"><span class="dot"></span>呢個月</div>
+    <div class="section-title"><span class="dot"></span><span id="monthNavLabel">呢個月</span></div>
+    <div class="month-nav">
+      <span class="nav-arrow" onclick="changeMonth(-1)">◀</span>
+      <span class="nav-current" id="monthNavCurrent"></span>
+      <span class="nav-arrow" id="nextArrow" onclick="changeMonth(1)">▶</span>
+    </div>
     <div class="month-total-wrap">
       <div class="burst"></div>
       <div class="month-total"><span id="monthTotal">0</span><span class="unit">元</span></div>
@@ -590,6 +666,8 @@
     </div>
     <ul class="log-list" id="logList"></ul>
     <div class="empty-note" id="logEmpty" style="display:none;">仲未有記錄,寫低今日發生咗乜就得</div>
+    <div class="past-toggle" id="pastToggle" onclick="togglePastLog()" style="display:none;"></div>
+    <ul class="log-list past-list" id="pastLogList" style="display:none;"></ul>
   </div>
 
   <!-- Upcoming / to-do -->
@@ -601,6 +679,8 @@
     </div>
     <ul class="log-list" id="upcomingList"></ul>
     <div class="empty-note" id="upcomingEmpty" style="display:none;">仲未有諗住做嘅嘢</div>
+    <div class="past-toggle" id="upcomingPastToggle" onclick="toggleUpcomingPast()" style="display:none;"></div>
+    <ul class="log-list past-list" id="upcomingPastList" style="display:none;"></ul>
   </div>
 </div>
 
@@ -615,6 +695,7 @@
   let logs = [];
   let upcoming = [];
   let currentCat = null;
+  let monthOffset = 0;
 
   const todayLabelEl = document.getElementById('todayLabel');
   const dateFmt = new Intl.DateTimeFormat('zh-Hant', { year:'numeric', month:'long', day:'numeric', weekday:'long' });
@@ -689,17 +770,33 @@
     renderUpcoming();
   }
 
+  let upcomingPastOpen = false;
+
+  function toggleUpcomingPast(){
+    upcomingPastOpen = !upcomingPastOpen;
+    renderUpcoming();
+  }
+
   function renderUpcoming(){
     const list = document.getElementById('upcomingList');
     const empty = document.getElementById('upcomingEmpty');
+    const pastToggle = document.getElementById('upcomingPastToggle');
+    const pastList = document.getElementById('upcomingPastList');
+
     list.innerHTML = '';
+    pastList.innerHTML = '';
+
     if(upcoming.length === 0){
       empty.style.display = 'block';
+      pastToggle.style.display = 'none';
+      pastList.style.display = 'none';
       return;
     }
     empty.style.display = 'none';
+
     const fmt = new Intl.DateTimeFormat('zh-Hant', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
-    upcoming.forEach(u => {
+
+    const buildItem = (u) => {
       const li = document.createElement('li');
       li.className = 'log-item upcoming-item';
       const doneLabel = (u.done && u.doneAt) ? `<div class="log-date">完成於 ${fmt.format(new Date(u.doneAt))}</div>` : '';
@@ -711,8 +808,35 @@
         </div>
         <span class="log-del" onclick="deleteUpcoming('${u.id}')">刪除</span>
       `;
-      list.appendChild(li);
-    });
+      return li;
+    };
+
+    const notDone = upcoming.filter(u => !u.done);
+    const done = upcoming.filter(u => u.done)
+      .sort((a,b) => new Date(b.doneAt || b.ts) - new Date(a.doneAt || a.ts));
+
+    notDone.forEach(u => list.appendChild(buildItem(u)));
+
+    let visibleDone, hiddenDone;
+    visibleDone = [];
+    hiddenDone = done;
+    visibleDone.forEach(u => list.appendChild(buildItem(u)));
+
+    if(notDone.length === 0 && visibleDone.length === 0){
+      empty.style.display = 'block';
+    }
+
+    if(hiddenDone.length > 0){
+      pastToggle.style.display = 'block';
+      pastToggle.textContent = upcomingPastOpen ? `▲ 收埋已完成 ${hiddenDone.length} 項` : `▼ 睇返已完成 ${hiddenDone.length} 項`;
+      pastList.style.display = upcomingPastOpen ? 'flex' : 'none';
+      if(upcomingPastOpen){
+        hiddenDone.forEach(u => pastList.appendChild(buildItem(u)));
+      }
+    } else {
+      pastToggle.style.display = 'none';
+      pastList.style.display = 'none';
+    }
   }
 
   const NOTE_PRESETS = {
@@ -795,12 +919,20 @@
     showToast(`${p.note} $${p.amt} 記低咗喇 ✓`);
   }
 
+  function todayISO(){
+    const d = new Date();
+    const off = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - off*60000);
+    return local.toISOString().slice(0,10);
+  }
+
   function openAmountPanel(cat){
     currentCat = cat;
     const panel = document.getElementById('amountPanel');
     panel.classList.add('show');
     document.getElementById('amountInput').value = '';
     document.getElementById('noteInput').value = '';
+    document.getElementById('dateInput').value = todayISO();
     renderChips(cat);
     document.getElementById('amountInput').focus();
   }
@@ -817,12 +949,16 @@
       return;
     }
     const note = document.getElementById('noteInput').value.trim();
+    const chosenDate = document.getElementById('dateInput').value || todayISO();
+    const ts = chosenDate === todayISO()
+      ? new Date().toISOString()
+      : new Date(chosenDate + 'T12:00:00').toISOString();
     expenses.push({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
       category: currentCat,
       amount: amt,
       note: note,
-      ts: new Date().toISOString()
+      ts: ts
     });
     await persistExpenses();
     closeAmountPanel();
@@ -834,8 +970,22 @@
     return d.getFullYear() + '-' + (d.getMonth()+1);
   }
 
+  function targetDateForOffset(offset){
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + offset);
+    return d;
+  }
+
+  function changeMonth(delta){
+    if(monthOffset + delta > 0) return;
+    monthOffset += delta;
+    renderDashboard();
+  }
+
   function renderDashboard(){
-    const key = currentMonthKey();
+    const target = targetDateForOffset(monthOffset);
+    const key = currentMonthKey(target);
     const monthExpenses = expenses.filter(e => currentMonthKey(new Date(e.ts)) === key);
 
     const totals = { '食':0, '行':0, '其他':0 };
@@ -850,6 +1000,11 @@
     setBar('barFood', 'amtFood', totals['食'], max, maxHeight);
     setBar('barTransport', 'amtTransport', totals['行'], max, maxHeight);
     setBar('barOther', 'amtOther', totals['其他'], max, maxHeight);
+
+    document.getElementById('monthNavLabel').textContent = monthOffset === 0 ? '呢個月' : '過去';
+    const label = new Intl.DateTimeFormat('zh-Hant', { year:'numeric', month:'long' }).format(target);
+    document.getElementById('monthNavCurrent').textContent = label;
+    document.getElementById('nextArrow').classList.toggle('disabled', monthOffset === 0);
   }
 
   function setBar(barId, amtId, value, max, maxHeight){
@@ -879,23 +1034,64 @@
     renderLog();
   }
 
+  let pastLogOpen = false;
+
+  function togglePastLog(){
+    pastLogOpen = !pastLogOpen;
+    renderLog();
+  }
+
   function renderLog(){
     const list = document.getElementById('logList');
     const empty = document.getElementById('logEmpty');
+    const pastToggle = document.getElementById('pastToggle');
+    const pastList = document.getElementById('pastLogList');
+
     list.innerHTML = '';
+    pastList.innerHTML = '';
+
     if(logs.length === 0){
       empty.style.display = 'block';
+      pastToggle.style.display = 'none';
+      pastList.style.display = 'none';
       return;
     }
     empty.style.display = 'none';
+
+    const recent = logs.slice(0, 5);
+    const past = logs.slice(5);
+
     const fmt = new Intl.DateTimeFormat('zh-Hant', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
-    logs.forEach(l => {
+
+    const buildItem = (l) => {
       const li = document.createElement('li');
       li.className = 'log-item';
       const dateStr = fmt.format(new Date(l.ts));
       li.innerHTML = `<div class="log-date">${dateStr}</div><div>${escapeHtml(l.text)}</div><span class="log-del" onclick="deleteLog('${l.id}')">刪除</span>`;
+      return li;
+    };
+
+    if(recent.length === 0){
+      const li = document.createElement('li');
+      li.className = 'empty-note';
+      li.style.padding = '4px';
+      li.textContent = '仲未有記錄';
       list.appendChild(li);
-    });
+    } else {
+      recent.forEach(l => list.appendChild(buildItem(l)));
+    }
+
+    if(past.length > 0){
+      pastToggle.style.display = 'block';
+      pastToggle.textContent = pastLogOpen ? `▲ 收埋過去 ${past.length} 條記錄` : `▼ 睇返過去 ${past.length} 條記錄`;
+      pastList.style.display = pastLogOpen ? 'flex' : 'none';
+      if(pastLogOpen){
+        past.forEach(l => pastList.appendChild(buildItem(l)));
+      }
+    } else {
+      pastToggle.style.display = 'none';
+      pastList.style.display = 'none';
+    }
   }
 
   function escapeHtml(str){
