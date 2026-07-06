@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="整理">
@@ -25,6 +25,11 @@
 
   *{ box-sizing: border-box; }
 
+  html, body{
+    overflow-x: hidden;
+    width: 100%;
+  }
+
   body{
     margin:0;
     background: var(--paper-2);
@@ -34,12 +39,16 @@
     color: var(--ink);
     font-family: 'Noto Sans TC', sans-serif;
     min-height: 100vh;
-    padding: 22px 14px 60px;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 28px);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+    padding-left: calc(env(safe-area-inset-left, 0px) + 14px);
+    padding-right: calc(env(safe-area-inset-right, 0px) + 14px);
   }
 
   .app{
     max-width: 480px;
     margin: 0 auto;
+    overflow: hidden;
   }
 
   header{
@@ -456,11 +465,13 @@
   /* Weekly log */
   .log-input-row{
     display:flex;
+    flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 18px;
   }
   .log-input-row input{
     flex:1;
+    min-width: 120px;
     font-size: 14px;
     font-family:'Noto Sans TC', sans-serif;
     font-weight: 500;
@@ -472,6 +483,7 @@
     outline:none;
   }
   .log-input-row button{
+    flex-shrink: 0;
     background: var(--ink);
     color: #fff;
     border: 2.5px solid var(--ink);
@@ -485,7 +497,9 @@
   .log-input-row button:active{ transform: translate(1px,1px); box-shadow: 1px 1px 0 var(--red); }
 
   .log-input-row input[type="date"].log-date-input{
-    flex: 0 0 118px;
+    flex: 1 1 118px;
+    min-width: 100px;
+    max-width: 100%;
     font-size: 12px;
     font-weight: 700;
     border: 2px solid var(--ink);
