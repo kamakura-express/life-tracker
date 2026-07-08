@@ -298,6 +298,27 @@
 
   .btn-row{ display:flex; gap: 10px; }
 
+  .panel-edit-label{
+    font-size: 12px;
+    font-weight: 900;
+    color: var(--red);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .delete-row{
+    text-align:center;
+    margin-top: 12px;
+  }
+  .delete-row span{
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--soft);
+    cursor:pointer;
+  }
+  .delete-row span:hover{ color: var(--red); }
+
   .btn{
     border: 2.5px solid var(--ink);
     border-radius: 6px;
@@ -404,10 +425,10 @@
   .bars{
     display:flex;
     align-items:flex-end;
-    gap: 18px;
+    gap: 10px;
     height: 110px;
     margin-bottom: 10px;
-    padding: 0 6px;
+    padding: 0 2px;
   }
 
   .bar-col{
@@ -417,11 +438,12 @@
     align-items:center;
     justify-content:flex-end;
     height:100%;
+    min-width: 0;
   }
 
   .bar{
     width: 100%;
-    max-width: 46px;
+    max-width: 40px;
     border: 2.5px solid var(--ink);
     border-radius: 3px 3px 0 0;
     transition: height .4s ease;
@@ -437,6 +459,10 @@
     background-image: radial-gradient(circle, var(--ink) 2.2px, transparent 2.2px);
     background-size: 9px 9px;
     background-position: center;
+  }
+  .bar.misc{
+    background-color: var(--paper);
+    background-image: repeating-linear-gradient(90deg, var(--ink) 0 3px, var(--paper) 3px 7px);
   }
 
   .bar-label{
@@ -545,6 +571,42 @@
   }
   .log-item .log-del:hover{ opacity:1; color: var(--red); }
 
+  .expense-item{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    padding-right: 66px;
+  }
+  .expense-item .expense-main{ flex:1; min-width:0; }
+  .expense-item .expense-cat{
+    display:inline-block;
+    font-size: 10px;
+    font-weight: 900;
+    background: var(--ink);
+    color: #fff;
+    border-radius: 3px;
+    padding: 1px 6px;
+    margin-right: 6px;
+  }
+  .expense-item .expense-amt{
+    font-weight: 900;
+    color: var(--red);
+  }
+  .expense-actions{
+    position:absolute;
+    top:8px; right:10px;
+    display:flex;
+    gap: 10px;
+  }
+  .expense-actions span{
+    cursor:pointer;
+    color: var(--soft);
+    font-size: 12px;
+    font-weight: 700;
+    opacity:.6;
+  }
+  .expense-actions span:hover{ opacity:1; color: var(--red); }
+
   .past-toggle{
     margin-top: 12px;
     text-align:center;
@@ -650,9 +712,17 @@
         <div>定期</div>
         <div class="fixed-pins" data-fixed-for="定期"></div>
       </div>
+      <div class="cat-btn misc" data-cat="其他" onclick="openAmountPanel('其他')">
+        <svg viewBox="0 0 40 40" fill="none" stroke="#131313" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 32 C20 32 6 23 6 13.5 C6 8.5 10 6 14 6 C17 6 19 8 20 10 C21 8 23 6 26 6 C30 6 34 8.5 34 13.5 C34 23 20 32 20 32 Z"/>
+        </svg>
+        <div>其他</div>
+        <div class="fixed-pins" data-fixed-for="其他"></div>
+      </div>
     </div>
 
     <div class="amount-panel" id="amountPanel">
+      <div class="panel-edit-label" id="panelEditLabel" style="display:none;"></div>
       <div class="row">
         <span class="currency">$</span>
         <input type="number" id="amountInput" placeholder="0" inputmode="decimal">
@@ -664,8 +734,11 @@
       <input type="text" id="noteInput" placeholder="備註(選填,例如：奶茶、地鐵)">
       <div class="chip-row" id="chipRow"></div>
       <div class="btn-row">
-        <button class="btn btn-save" onclick="saveExpense()">記低</button>
+        <button class="btn btn-save" id="saveBtn" onclick="saveExpense()">記低</button>
         <button class="btn btn-cancel" onclick="closeAmountPanel()">算了</button>
+      </div>
+      <div class="delete-row" id="deleteRow" style="display:none;">
+        <span onclick="deleteExpenseFromPanel()">🗑 刪除呢筆記錄</span>
       </div>
     </div>
   </div>
@@ -703,7 +776,16 @@
         <div class="bar-label">定期</div>
         <div class="bar-amount" id="amtRegular">0</div>
       </div>
+      <div class="bar-col">
+        <div class="bar misc" id="barMisc" style="height:6px;"></div>
+        <div class="bar-label">其他</div>
+        <div class="bar-amount" id="amtMisc">0</div>
+      </div>
     </div>
+
+    <div class="past-toggle" id="expenseListToggle" onclick="toggleExpenseList()">▼ 睇返/編輯 呢個月記錄</div>
+    <ul class="log-list past-list" id="expenseList" style="display:none;"></ul>
+    <div class="empty-note" id="expenseListEmpty" style="display:none;">呢個月仲未有記錄</div>
   </div>
 
   <!-- Weekly free log -->
@@ -745,6 +827,7 @@
   let logs = [];
   let upcoming = [];
   let currentCat = null;
+  let editingExpenseId = null;
   let monthOffset = 0;
 
   const todayLabelEl = document.getElementById('todayLabel');
@@ -912,6 +995,9 @@
       { note: '美甲' },
       { note: '剪頭髮' },
       { note: 'Facial' }
+    ],
+    '其他': [
+      { note: '抖內' }
     ]
   };
 
@@ -943,7 +1029,8 @@
       { note: '600巴士', amt: 12.6 }
     ],
     '買野': [],
-    '定期': []
+    '定期': [],
+    '其他': []
   };
 
   function renderFixedRow(){
@@ -985,18 +1072,51 @@
 
   function openAmountPanel(cat){
     currentCat = cat;
+    editingExpenseId = null;
     const panel = document.getElementById('amountPanel');
     panel.classList.add('show');
     document.getElementById('amountInput').value = '';
     document.getElementById('noteInput').value = '';
     document.getElementById('dateInput').value = todayISO();
+    document.getElementById('panelEditLabel').style.display = 'none';
+    document.getElementById('deleteRow').style.display = 'none';
+    document.getElementById('saveBtn').textContent = '記低';
     renderChips(cat);
     document.getElementById('amountInput').focus();
+  }
+
+  function editExpense(id){
+    const exp = expenses.find(e => e.id === id);
+    if(!exp) return;
+    currentCat = exp.category;
+    editingExpenseId = id;
+    const panel = document.getElementById('amountPanel');
+    panel.classList.add('show');
+    document.getElementById('amountInput').value = exp.amount;
+    document.getElementById('noteInput').value = exp.note || '';
+    document.getElementById('dateInput').value = new Date(exp.ts).toISOString().slice(0,10);
+    document.getElementById('panelEditLabel').style.display = 'block';
+    document.getElementById('panelEditLabel').textContent = `編輯「${exp.category}」記錄`;
+    document.getElementById('deleteRow').style.display = 'block';
+    document.getElementById('saveBtn').textContent = '更新';
+    renderChips(exp.category);
+    document.getElementById('amountInput').focus();
+    panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  async function deleteExpenseFromPanel(){
+    if(!editingExpenseId) return;
+    expenses = expenses.filter(e => e.id !== editingExpenseId);
+    await persistExpenses();
+    closeAmountPanel();
+    renderDashboard();
+    showToast('刪除咗喇');
   }
 
   function closeAmountPanel(){
     document.getElementById('amountPanel').classList.remove('show');
     currentCat = null;
+    editingExpenseId = null;
   }
 
   async function saveExpense(){
@@ -1010,6 +1130,21 @@
     const ts = chosenDate === todayISO()
       ? new Date().toISOString()
       : new Date(chosenDate + 'T12:00:00').toISOString();
+
+    if(editingExpenseId){
+      const exp = expenses.find(e => e.id === editingExpenseId);
+      if(exp){
+        exp.amount = amt;
+        exp.note = note;
+        exp.ts = ts;
+      }
+      await persistExpenses();
+      closeAmountPanel();
+      renderDashboard();
+      showToast('更新咗喇 ✓');
+      return;
+    }
+
     expenses.push({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
       category: currentCat,
@@ -1045,24 +1180,85 @@
     const key = currentMonthKey(target);
     const monthExpenses = expenses.filter(e => currentMonthKey(new Date(e.ts)) === key);
 
-    const totals = { '食':0, '行':0, '買野':0, '定期':0 };
+    const totals = { '食':0, '行':0, '買野':0, '定期':0, '其他':0 };
     monthExpenses.forEach(e => { totals[e.category] = (totals[e.category]||0) + e.amount; });
 
-    const total = totals['食'] + totals['行'] + totals['買野'] + totals['定期'];
+    const total = totals['食'] + totals['行'] + totals['買野'] + totals['定期'] + totals['其他'];
     document.getElementById('monthTotal').textContent = total.toLocaleString();
 
-    const max = Math.max(totals['食'], totals['行'], totals['買野'], totals['定期'], 1);
+    const max = Math.max(totals['食'], totals['行'], totals['買野'], totals['定期'], totals['其他'], 1);
     const maxHeight = 90;
 
     setBar('barFood', 'amtFood', totals['食'], max, maxHeight);
     setBar('barTransport', 'amtTransport', totals['行'], max, maxHeight);
     setBar('barOther', 'amtOther', totals['買野'], max, maxHeight);
     setBar('barRegular', 'amtRegular', totals['定期'], max, maxHeight);
+    setBar('barMisc', 'amtMisc', totals['其他'], max, maxHeight);
 
     document.getElementById('monthNavLabel').textContent = monthOffset === 0 ? '呢個月' : '過去';
     const label = new Intl.DateTimeFormat('zh-Hant', { year:'numeric', month:'long' }).format(target);
     document.getElementById('monthNavCurrent').textContent = label;
     document.getElementById('nextArrow').classList.toggle('disabled', monthOffset === 0);
+
+    renderExpenseList(monthExpenses);
+  }
+
+  let expenseListOpen = false;
+
+  function toggleExpenseList(){
+    expenseListOpen = !expenseListOpen;
+    const list = document.getElementById('expenseList');
+    const toggle = document.getElementById('expenseListToggle');
+    list.style.display = expenseListOpen ? 'flex' : 'none';
+    toggle.textContent = expenseListOpen ? '▲ 收埋記錄' : '▼ 睇返/編輯 呢個月記錄';
+  }
+
+  function renderExpenseList(monthExpenses){
+    const list = document.getElementById('expenseList');
+    const empty = document.getElementById('expenseListEmpty');
+    const toggle = document.getElementById('expenseListToggle');
+    list.innerHTML = '';
+
+    if(monthExpenses.length === 0){
+      toggle.style.display = 'none';
+      list.style.display = 'none';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    toggle.style.display = 'block';
+
+    const sorted = [...monthExpenses].sort((a,b) => new Date(b.ts) - new Date(a.ts));
+    const fmt = new Intl.DateTimeFormat('zh-Hant', { month:'numeric', day:'numeric' });
+
+    sorted.forEach(e => {
+      const li = document.createElement('li');
+      li.className = 'log-item expense-item';
+      const noteText = e.note ? escapeHtml(e.note) : '';
+      li.innerHTML = `
+        <div class="expense-main">
+          <span class="expense-cat">${escapeHtml(e.category)}</span>
+          <span class="expense-amt">$${e.amount.toLocaleString()}</span>
+          ${noteText ? ' · ' + noteText : ''}
+          <div class="log-date">${fmt.format(new Date(e.ts))}</div>
+        </div>
+        <div class="expense-actions">
+          <span onclick="editExpense('${e.id}')">✎ 改</span>
+          <span onclick="quickDeleteExpense('${e.id}')">🗑</span>
+        </div>
+      `;
+      list.appendChild(li);
+    });
+
+    list.style.display = expenseListOpen ? 'flex' : 'none';
+    toggle.textContent = expenseListOpen ? '▲ 收埋記錄' : '▼ 睇返/編輯 呢個月記錄';
+  }
+
+  async function quickDeleteExpense(id){
+    expenses = expenses.filter(e => e.id !== id);
+    await persistExpenses();
+    renderDashboard();
+    showToast('刪除咗喇');
   }
 
   function setBar(barId, amtId, value, max, maxHeight){
