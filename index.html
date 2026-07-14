@@ -546,6 +546,77 @@
     justify-content:flex-end;
     height:100%;
     min-width: 0;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: 4px 2px 2px;
+    transition: background .12s ease;
+  }
+  .bar-col:hover{ background: var(--paper-2); }
+  .bar-col.selected{ background: var(--paper-2); outline: 2px dashed var(--ink); outline-offset: 2px; }
+
+  .breakdown-panel{
+    margin-top: 16px;
+    background: var(--paper-2);
+    border: 2.5px solid var(--ink);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .breakdown-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    font-size: 13px;
+    font-weight: 900;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 2px dashed var(--ink);
+  }
+  .breakdown-close{
+    cursor:pointer;
+    font-size: 13px;
+    color: var(--soft);
+    font-weight: 900;
+  }
+  .breakdown-close:hover{ color: var(--red); }
+  .breakdown-row{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .breakdown-row .bd-note{
+    flex-shrink:0;
+    width: 84px;
+    font-weight: 700;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .breakdown-row .bd-bar-track{
+    flex:1;
+    height: 14px;
+    background: var(--paper);
+    border: 1.5px solid var(--ink);
+    border-radius: 3px;
+    overflow:hidden;
+  }
+  .breakdown-row .bd-bar-fill{
+    height:100%;
+    background: var(--red);
+  }
+  .breakdown-row .bd-amt{
+    flex-shrink:0;
+    width: 62px;
+    text-align:right;
+    font-weight: 900;
+    color: var(--red);
+  }
+  .breakdown-empty{
+    font-size: 12px;
+    color: var(--soft);
+    text-align:center;
+    padding: 10px;
   }
 
   .bar{
@@ -1005,36 +1076,44 @@
       <div class="month-total"><span id="monthTotal">0</span><span class="unit">元</span></div>
     </div>
     <div class="bars" id="barsWrap">
-      <div class="bar-col">
+      <div class="bar-col" onclick="showBreakdown('食')">
         <div class="bar food" id="barFood" style="height:6px;"></div>
         <div class="bar-label">食</div>
         <div class="bar-amount" id="amtFood">0</div>
       </div>
-      <div class="bar-col">
+      <div class="bar-col" onclick="showBreakdown('行')">
         <div class="bar transport" id="barTransport" style="height:6px;"></div>
         <div class="bar-label">行</div>
         <div class="bar-amount" id="amtTransport">0</div>
       </div>
-      <div class="bar-col">
+      <div class="bar-col" onclick="showBreakdown('買野')">
         <div class="bar other" id="barOther" style="height:6px;"></div>
         <div class="bar-label">買野</div>
         <div class="bar-amount" id="amtOther">0</div>
       </div>
-      <div class="bar-col">
+      <div class="bar-col" onclick="showBreakdown('定期')">
         <div class="bar regular" id="barRegular" style="height:6px;"></div>
         <div class="bar-label">定期</div>
         <div class="bar-amount" id="amtRegular">0</div>
       </div>
-      <div class="bar-col">
+      <div class="bar-col" onclick="showBreakdown('其他')">
         <div class="bar misc" id="barMisc" style="height:6px;"></div>
         <div class="bar-label">其他</div>
         <div class="bar-amount" id="amtMisc">0</div>
       </div>
-      <div class="bar-col">
+      <div class="bar-col" onclick="showBreakdown('信用卡')">
         <div class="bar ccard" id="barCard" style="height:6px;"></div>
         <div class="bar-label">信用卡</div>
         <div class="bar-amount" id="amtCard">0</div>
       </div>
+    </div>
+
+    <div class="breakdown-panel" id="breakdownPanel" style="display:none;">
+      <div class="breakdown-header">
+        <span id="breakdownTitle"></span>
+        <span class="breakdown-close" onclick="closeBreakdown()">✕</span>
+      </div>
+      <div id="breakdownList"></div>
     </div>
 
     <div class="past-toggle" id="expenseListToggle" onclick="toggleExpenseList()">▼ 睇返/編輯 呢個月記錄</div>
@@ -1140,6 +1219,8 @@
   let currentCat = null;
   let editingExpenseId = null;
   let monthOffset = 0;
+  let currentMonthExpenses = [];
+  let selectedBreakdownCat = null;
 
   const todayLabelEl = document.getElementById('todayLabel');
   const dateFmt = new Intl.DateTimeFormat('zh-Hant', { year:'numeric', month:'long', day:'numeric', weekday:'long' });
@@ -1345,7 +1426,8 @@
       { note: '中醫' },
       { note: '美甲' },
       { note: '剪頭髮' },
-      { note: 'Facial' }
+      { note: 'Facial' },
+      { note: 'Counselling' }
     ],
     '其他': [
       { note: '抖內' }
@@ -1611,6 +1693,7 @@
     const target = targetDateForOffset(monthOffset);
     const key = currentMonthKey(target);
     const monthExpenses = expenses.filter(e => currentMonthKey(new Date(e.ts)) === key);
+    currentMonthExpenses = monthExpenses;
 
     const totals = { '食':0, '行':0, '買野':0, '定期':0, '其他':0, '信用卡':0 };
     monthExpenses.forEach(e => { totals[e.category] = (totals[e.category]||0) + e.amount; });
@@ -1634,6 +1717,10 @@
     document.getElementById('nextArrow').classList.toggle('disabled', monthOffset === 0);
 
     renderExpenseList(monthExpenses);
+
+    if(selectedBreakdownCat){
+      showBreakdown(selectedBreakdownCat);
+    }
   }
 
   let expenseListOpen = false;
@@ -1698,6 +1785,57 @@
     const h = value > 0 ? Math.max(6, (value/max) * maxHeight) : 6;
     document.getElementById(barId).style.height = h + 'px';
     document.getElementById(amtId).textContent = value.toLocaleString();
+  }
+
+  const BAR_COL_INDEX = { '食':0, '行':1, '買野':2, '定期':3, '其他':4, '信用卡':5 };
+
+  function showBreakdown(cat){
+    selectedBreakdownCat = cat;
+
+    document.querySelectorAll('#barsWrap .bar-col').forEach((el, idx) => {
+      el.classList.toggle('selected', idx === BAR_COL_INDEX[cat]);
+    });
+
+    const items = currentMonthExpenses.filter(e => e.category === cat);
+    const panel = document.getElementById('breakdownPanel');
+    const title = document.getElementById('breakdownTitle');
+    const list = document.getElementById('breakdownList');
+
+    panel.style.display = 'block';
+    title.textContent = `${cat} 分佈`;
+    list.innerHTML = '';
+
+    if(items.length === 0){
+      list.innerHTML = '<div class="breakdown-empty">呢個分類仲未有記錄</div>';
+      return;
+    }
+
+    const byNote = {};
+    items.forEach(e => {
+      const key = e.note && e.note.trim() ? e.note.trim() : '(未有備註)';
+      byNote[key] = (byNote[key] || 0) + e.amount;
+    });
+
+    const sorted = Object.entries(byNote).sort((a,b) => b[1] - a[1]);
+    const max = sorted[0][1];
+
+    sorted.forEach(([note, amt]) => {
+      const pct = Math.max(4, (amt / max) * 100);
+      const row = document.createElement('div');
+      row.className = 'breakdown-row';
+      row.innerHTML = `
+        <span class="bd-note">${escapeHtml(note)}</span>
+        <span class="bd-bar-track"><span class="bd-bar-fill" style="width:${pct}%;"></span></span>
+        <span class="bd-amt">$${amt.toLocaleString()}</span>
+      `;
+      list.appendChild(row);
+    });
+  }
+
+  function closeBreakdown(){
+    selectedBreakdownCat = null;
+    document.getElementById('breakdownPanel').style.display = 'none';
+    document.querySelectorAll('#barsWrap .bar-col').forEach(el => el.classList.remove('selected'));
   }
 
   async function addLog(){
