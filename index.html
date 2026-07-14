@@ -92,6 +92,18 @@
     vertical-align: middle;
   }
 
+  .sync-badge{
+    display:inline-block;
+    margin-top: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #3B7D3B;
+    background: #DBEDDB;
+    border: 1.5px solid #3B7D3B;
+    border-radius: 20px;
+    padding: 3px 10px;
+  }
+
   .card{
     background: var(--paper);
     border: 3px solid var(--ink);
@@ -878,6 +890,7 @@
   <header>
     <div class="banner"><h1>整理</h1></div>
     <div class="sub" id="todayLabel"></div>
+    <div class="sync-badge" id="syncBadge" style="display:none;">☁️ 已連接同步</div>
   </header>
 
   <!-- Quick record -->
@@ -1080,7 +1093,43 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Firebase (for cross-device sync) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 <script>
+  // ===== Firebase 設定 =====
+  // 去 https://console.firebase.google.com 開個project、開啟Firestore Database之後,
+  // 喺 Project settings → Your apps → Web app 度攞返呢組config,填入下面就得。
+  // 未填之前(即係仲係下面呢啲假值),app會照舊淨係用返本機儲存,唔會sync。
+  const FIREBASE_CONFIG = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  let firebaseReady = false;
+  let db = null;
+
+  function tryInitFirebase(){
+    if(FIREBASE_CONFIG.apiKey === "YOUR_API_KEY") return;
+    try{
+      firebase.initializeApp(FIREBASE_CONFIG);
+      db = firebase.firestore();
+      firebaseReady = true;
+      console.log('Firebase sync 已連接');
+      const badge = document.getElementById('syncBadge');
+      if(badge) badge.style.display = 'inline-block';
+    }catch(e){
+      console.error('Firebase init failed', e);
+      firebaseReady = false;
+    }
+  }
+  tryInitFirebase();
+
   const EXPENSES_KEY = 'expenses-v1';
   const LOG_KEY = 'life-log-v1';
   const UPCOMING_KEY = 'upcoming-v1';
@@ -1099,6 +1148,16 @@
   const hasClaudeStorage = () => (typeof window.storage !== 'undefined' && window.storage && typeof window.storage.get === 'function');
 
   async function storeGet(key){
+    if(firebaseReady){
+      try{
+        const doc = await db.collection('lifeapp_data').doc(key).get();
+        if(doc.exists){
+          const value = doc.data().value;
+          try{ localStorage.setItem(key, value); }catch(e){}
+          return value;
+        }
+      }catch(e){ console.error('firestore get failed, falling back', e); }
+    }
     if(hasClaudeStorage()){
       try{
         const r = await window.storage.get(key, false);
@@ -1109,13 +1168,42 @@
   }
 
   async function storeSet(key, value){
+    try{ localStorage.setItem(key, value); }catch(e){}
+    if(firebaseReady){
+      try{
+        await db.collection('lifeapp_data').doc(key).set({
+          value: value,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        return;
+      }catch(e){ console.error('firestore set failed, falling back', e); }
+    }
     if(hasClaudeStorage()){
       try{ await window.storage.set(key, value, false); }
       catch(e){ console.error('claude storage set failed', e); }
-      return;
     }
-    try{ localStorage.setItem(key, value); }
-    catch(e){ console.error('localStorage set failed', e); }
+  }
+
+  function watchRemoteSync(){
+    if(!firebaseReady) return;
+    const keys = [EXPENSES_KEY, LOG_KEY, UPCOMING_KEY, FIXED_PRESETS_KEY];
+    keys.forEach(key => {
+      db.collection('lifeapp_data').doc(key).onSnapshot(doc => {
+        if(!doc.exists) return;
+        const value = doc.data().value;
+        applyRemoteUpdate(key, value);
+      }, err => console.error('sync listener error', err));
+    });
+  }
+
+  function applyRemoteUpdate(key, value){
+    try{
+      if(key === EXPENSES_KEY){ expenses = JSON.parse(value); renderDashboard(); }
+      else if(key === LOG_KEY){ logs = JSON.parse(value); renderLog(); if(logViewMode === 'calendar') renderCalendar(); }
+      else if(key === UPCOMING_KEY){ upcoming = JSON.parse(value); renderUpcoming(); }
+      else if(key === FIXED_PRESETS_KEY){ fixedPresets = JSON.parse(value); renderFixedRow(); }
+      try{ localStorage.setItem(key, value); }catch(e){}
+    }catch(e){ console.error('apply remote update failed', e); }
   }
 
   async function loadData(){
@@ -1875,7 +1963,7 @@
     if(e.key === 'Enter') addUpcoming();
   });
 
-  loadData();
+  loadData().then(() => watchRemoteSync());
 </script>
 
 </body>
